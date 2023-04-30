@@ -920,8 +920,6 @@ types:
             type: layer_information
           - id: global_layer_mask_info
             type: global_layer_mask_information
-          # - id: rest
-          #   size-eos: true
           - id: additional_layer_info
             type: additional_layer_information
             # Despite what Adobe's documentation claims (or rather, doesn't claim), the layer and
@@ -930,6 +928,7 @@ types:
             # incorrect about the assertion above.
             repeat: until
             repeat-until: _io.size - _io.pos < 4
+            if: _io.size - _io.pos > 4
         types:
           layer_information:
             seq:
@@ -944,7 +943,7 @@ types:
             types:
               layer_information_data:
                 seq:
-                  - id: layer_count
+                  - id: layer_count_raw
                     type: s2
                   - id: layer_records
                     type: layer_record
@@ -954,6 +953,10 @@ types:
                     type: channel_image_data_records(_index)
                     repeat: expr
                     repeat-expr: layer_count
+                instances:
+                  layer_count:
+                    value: 'layer_count_raw < 0 ? -layer_count_raw : layer_count_raw'
+                  
                 types:
                   layer_record:
                     seq:
@@ -1108,6 +1111,7 @@ types:
                               - id: data
                                 type: layer_blending_ranges_data
                                 size: size_of_data
+                                if: size_of_data > 0
                             types:
                               layer_blending_ranges_data:
                                 seq:
@@ -1215,13 +1219,13 @@ types:
                     #adjustment_layer_types::protected_setting: protected_setting_data
                     #adjustment_layer_types::sheet_color_setting: sheet_color_setting_data
                     #adjustment_layer_types::reference_point: reference_point_data
-                    #adjustment_layer_types::section_divider_setting: section_divider_setting_data
+                    adjustment_layer_types::section_divider_setting: section_divider_setting_data
                     #adjustment_layer_types::channel_blending_restrictions_setting: channel_blending_restrictions_setting_data
                     #adjustment_layer_types::vector_mask_setting_1: vector_mask_setting_1_data
                     #adjustment_layer_types::vector_mask_setting_2: vector_mask_setting_2_data
                     #adjustment_layer_types::type_tool_object_setting: type_tool_object_setting_data
                     #adjustment_layer_types::foreign_effects_id: foreign_effects_id_data
-                    #adjustment_layer_types::layer_name_source_setting: layer_name_source_setting_data
+                    adjustment_layer_types::layer_name_source_setting: layer_name_source_setting_data
                     #adjustment_layer_types::pattern_data: pattern_data_data
                     #adjustment_layer_types::metadata_setting: metadata_setting_data
                     #adjustment_layer_types::layer_version: layer_version_data
@@ -1660,6 +1664,25 @@ types:
                 seq:
                   - id: layer_id
                     size: 4
+              section_divider_setting_data:
+                seq:
+                  - id: type
+                    type: u4
+                    enum: section_divider_setting_types
+                  - id: rest
+                    size-eos: true
+                enums:
+                  section_divider_setting_types:
+                    0: normal
+                    1: open_folder
+                    2: closed_folder
+                    3: bounding_section_divider
+              layer_name_source_setting_data:
+                seq:
+                  - id: id
+                    type: str
+                    encoding: ASCII
+                    size: 4
               object_based_effects_layer_info_data:
                 seq:
                   - id: version
@@ -2015,7 +2038,7 @@ types:
         size: length
       - id: padding
         size: 1
-        if: (length % 2) == 0
+        if: length % 2 == 0 and _io.pos < _io.size
   pascal_string_padded_to_4_byte_multiple:
     seq:
       - id: length
