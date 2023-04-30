@@ -13,7 +13,7 @@ seq:
   - id: layer_and_mask_information
     type: psd_layer_and_mask_information
   - id: image_data
-    type: psd_image_data
+    type: psd_image_data(header.dimensions.width, header.dimensions.height, header.num_channels)
 types:
   psd_header:
     seq:
@@ -229,14 +229,14 @@ types:
                   resolution_definition:
                     seq:
                       - id: resolution
-                        size: 4
-                      - id: display_unit
                         type: s2
+                      - id: display_unit
+                        type: s4
                         enum: display_units
                     enums:
                       display_units:
-                        0: pixels_per_inch
-                        1: pixels_per_cm
+                        1: pixels_per_inch
+                        2: pixels_per_cm
                 enums:
                   width_height_units:
                     1: inches
@@ -920,9 +920,16 @@ types:
             type: layer_information
           - id: global_layer_mask_info
             type: global_layer_mask_information
+          # - id: rest
+          #   size-eos: true
           - id: additional_layer_info
             type: additional_layer_information
-            repeat: eos
+            # Despite what Adobe's documentation claims (or rather, doesn't claim), the layer and
+            # mask information section appears to be padded to the nearest multiple of 4 bytes,
+            # based on a test file I created. So `repeat: eos` won't work here, unless I'm
+            # incorrect about the assertion above.
+            repeat: until
+            repeat-until: _io.size - _io.pos < 4
         types:
           layer_information:
             seq:
@@ -943,20 +950,21 @@ types:
                     type: layer_record
                     repeat: expr
                     repeat-expr: layer_count
-                  - id: channel_image_data_records
-                    size-eos: true
-                    #type: channel_image_data_record
+                  - id: channel_image_data
+                    type: channel_image_data_records(_index)
+                    repeat: expr
+                    repeat-expr: layer_count
                 types:
                   layer_record:
                     seq:
                       - id: bounding_box
                         type: bounding_box_type
-                      - id: number_of_channels
+                      - id: num_channels
                         type: s2
                       - id: channel_information
                         type: channel_information_record
                         repeat: expr
-                        repeat-expr: number_of_channels
+                        repeat-expr: num_channels
                       - id: blend_mode
                         type: blend_mode_structure
                       - id: opacity
@@ -974,32 +982,38 @@ types:
                       - id: extra_data
                         type: extra_layer_data
                         size: size_of_extra_data_fields
+                        if: size_of_extra_data_fields > 0
                     types:
                       bounding_box_type:
                         seq:
                           - id: top
-                            size: 4
+                            type: s4
                           - id: left
-                            size: 4
+                            type: s4
                           - id: bottom
-                            size: 4
+                            type: s4
                           - id: right
-                            size: 4
+                            type: s4
+                        instances:
+                          width:
+                            value: right - left
+                          height:
+                            value: bottom - top
                       channel_information_record:
                         seq:
                           - id: id
                             type: s2
                             enum: channel_ids
-                          - id: data
-                            size: 4
+                          - id: len_channel_data
+                            type: s4
                         enums:
                           channel_ids:
                             0: red
                             1: green
                             2: blue
-                            #-1: transparency_mask
-                            #-2: user_supplied_layer_mask
-                            #-3: real_user_supplied_layer_mask
+                            -1: transparency_mask
+                            -2: user_supplied_layer_mask
+                            -3: real_user_supplied_layer_mask
                       layer_record_flags:
                         seq:
                           - id: transparency_protected
@@ -1010,7 +1024,7 @@ types:
                             type: b1
                           - id: bit_4_has_useful_information
                             type: b1
-                          - id: pixel_data_irrelvant_to_appearance_of_document
+                          - id: pixel_data_irrelevant_to_appearance_of_document
                             type: b1
                           - id: unused_flags
                             type: b3
@@ -1113,6 +1127,16 @@ types:
                       clipping_modes:
                         0: base
                         1: non_base
+                  channel_image_data_records:
+                    params:
+                      - id: layer_index
+                        type: s4
+                    seq:
+                      - id: channels
+                        type: psd_image_data(_parent.layer_records[layer_index].bounding_box.width, _parent.layer_records[layer_index].bounding_box.height, 1)
+                        size: _parent.layer_records[layer_index].channel_information[_index].len_channel_data
+                        repeat: expr
+                        repeat-expr: _parent.layer_records[layer_index].num_channels
           global_layer_mask_information:
             seq:
               - id: size_of_data
@@ -1722,6 +1746,17 @@ types:
                 0x46586964: filter_effects_1 #FXid
                 0x46456964: filter_effects_2 #FEid
   psd_image_data:
+    params:
+      - id: width
+        type: s4
+      - id: height
+        type: s4
+      - id: num_channels
+        type: s2
+        doc: |
+          This should only ever != 1 for the image data section. Channel image data (local to
+          layers) is stored in a list of `psd_image_data` values, one for each channel, and each
+          one with a `num_channels` of 1.
     seq:
       - id: compression
         type: u2
@@ -1735,8 +1770,8 @@ types:
         type:
           switch-on: compression
           cases:
-            compression::raw: raw_data
-            compression::rle: rle_data
+            compression::raw: raw_data(width, height, num_channels)
+            compression::rle: rle_data(height, num_channels)
   descriptor_resource_with_version:
     seq:
       - id: descriptor_version
@@ -1980,7 +2015,7 @@ types:
         size: length
       - id: padding
         size: 1
-        if: length == 0 or length % 2 == 1
+        if: (length % 2) == 0
   pascal_string_padded_to_4_byte_multiple:
     seq:
       - id: length
@@ -2007,19 +2042,31 @@ types:
         type: u4
         enum: blend_modes
   raw_data:
+    params:
+      - id: width
+        type: s4
+      - id: height
+        type: s4
+      - id: num_channels
+        type: s2
     seq:
       - id: data
-        size: _root.header.dimensions.height * _root.header.dimensions.width * _root.header.num_channels
+        size: width * height * num_channels
   rle_data:
+    params:
+      - id: height
+        type: s4
+      - id: num_channels
+        type: s2
     seq:
       - id: byte_counts
         type: u2
         repeat: expr
-        repeat-expr: _root.header.dimensions.height * _root.header.num_channels
+        repeat-expr: height * num_channels
       - id: rle
         size: byte_counts[_index]
         repeat: expr
-        repeat-expr: _root.header.dimensions.height * _root.header.num_channels
+        repeat-expr: height * num_channels
 enums:
   color_mode:
     0: bitmap
