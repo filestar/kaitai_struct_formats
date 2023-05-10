@@ -18,7 +18,10 @@ types:
   psd_header:
     seq:
       - id: signature
-        contents: [0x38, 0x42, 0x50, 0x53] #8BIM
+        type: str
+        encoding: ASCII
+        size: 4
+        valid: '"8BPS"'
       - id: version
         contents: [0x00, 0x01]
       - id: reserved_field
@@ -68,8 +71,13 @@ types:
         types:
           image_resource_block:
             seq:
+              - size: 0
+                if: start_pos < 0
               - id: signature
-                contents: [0x38, 0x42, 0x49, 0x4d] #8BIM
+                type: str
+                encoding: ASCII
+                size: 4
+                valid: '"8BIM"'
               - id: unique_identifier_raw
                 type: s2
               - id: name
@@ -182,8 +190,10 @@ types:
                 if: resource_is_plug_in
               - id: padding
                 size: 1
-                if: (name.length + resource_data_size) % 2 == 1
+                if: (start_pos - _io.pos) % 2 == 1
             instances:
+              start_pos:
+                value: _io.pos
               unique_identifier:
                 value: unique_identifier_raw
                 enum: image_resource_identifier
@@ -315,94 +325,6 @@ types:
                   - id: index_of_target_layer
                     type: s2
                     doc: a value of 0 equates to the bottom layer
-              path_resource:
-                seq:
-                  - id: path_records
-                    type: path_record
-                    size: 26
-                    repeat: eos
-                types:
-                  path_record:
-                    seq:
-                      - id: path_type
-                        type: s2
-                        enum: type_of_paths
-                      - id: path_data
-                        type:
-                          switch-on: path_type
-                          cases:
-                            type_of_paths::closed_subpath_length_record: subpath_length_record_data
-                            type_of_paths::closed_subpath_bezier_knot_linked: bezier_knot_record_data
-                            type_of_paths::closed_subpath_bezier_knot_unlinked: bezier_knot_record_data
-                            type_of_paths::open_subpath_length_record: subpath_length_record_data
-                            type_of_paths::open_subpath_bezier_knot_linked: bezier_knot_record_data
-                            type_of_paths::open_subpath_bezier_knot_unlinked: bezier_knot_record_data
-                            type_of_paths::path_fill_rule_record: path_fill_rule_record_data
-                            type_of_paths::clipboard_record: clipboard_record_data
-                            type_of_paths::initial_fill_rule_record: initial_fill_rule_record_data
-                    types:
-                      path_fill_rule_record_data:
-                        seq:
-                          - id: padding
-                            size: 24
-                            doc: each byte must have a value of 0x00
-                      subpath_length_record_data:
-                        seq:
-                          - id: number_of_bezier_knot_records
-                            type: s2
-                          - id: padding
-                            size: 22
-                      bezier_knot_record_data:
-                        seq:
-                          - id: preceding_path_control_point
-                            type: path_point
-                          - id: anchor_point
-                            type: path_point
-                          - id: leaving_path_control_point
-                            type: path_point
-                        types:
-                          path_point:
-                            seq:
-                              - id: vertical_component
-                                size: 4
-                              - id: horizontal_component
-                                size: 4
-                      clipboard_record_data:
-                        seq:
-                          - id: top
-                            size: 4
-                          - id: left
-                            size: 4
-                          - id: bottom
-                            size: 4
-                          - id: right
-                            size: 4
-                          - id: resolution
-                            size: 4
-                          - id: padding
-                            size-eos: true
-                      initial_fill_rule_record_data:
-                        seq:
-                          - id: record
-                            type: s2
-                            enum: record_values
-                          - id: padding
-                            size-eos: true
-                        enums:
-                          record_values:
-                            0: fill_does_not_start_with_all_pixels
-                            1: fill_starts_with_all_pixels
-                    enums:
-                      type_of_paths:
-                        0: closed_subpath_length_record
-                        1: closed_subpath_bezier_knot_linked
-                        2: closed_subpath_bezier_knot_unlinked
-                        3: open_subpath_length_record
-                        4: open_subpath_bezier_knot_linked
-                        5: open_subpath_bezier_knot_unlinked
-                        6: path_fill_rule_record
-                        7: clipboard_record
-                        8: initial_fill_rule_record
               layers_group_information_resource:
                 seq:
                   - id: layer_groups
@@ -956,7 +878,6 @@ types:
                 instances:
                   layer_count:
                     value: 'layer_count_raw < 0 ? -layer_count_raw : layer_count_raw'
-                  
                 types:
                   layer_record:
                     seq:
@@ -987,36 +908,6 @@ types:
                         size: size_of_extra_data_fields
                         if: size_of_extra_data_fields > 0
                     types:
-                      bounding_box_type:
-                        seq:
-                          - id: top
-                            type: s4
-                          - id: left
-                            type: s4
-                          - id: bottom
-                            type: s4
-                          - id: right
-                            type: s4
-                        instances:
-                          width:
-                            value: right - left
-                          height:
-                            value: bottom - top
-                      channel_information_record:
-                        seq:
-                          - id: id
-                            type: s2
-                            enum: channel_ids
-                          - id: len_channel_data
-                            type: s4
-                        enums:
-                          channel_ids:
-                            0: red
-                            1: green
-                            2: blue
-                            -1: transparency_mask
-                            -2: user_supplied_layer_mask
-                            -3: real_user_supplied_layer_mask
                       layer_record_flags:
                         seq:
                           - id: transparency_protected
@@ -1064,9 +955,6 @@ types:
                                   - id: mask_params
                                     type: mask_parameters
                                     if: flags.user_and_or_vector_masks_have_parameters_applied == true
-                                  - id: padding
-                                    contents: [0x00, 0x00]
-                                    if: _parent.size_of_data == 20
                                   - id: real_flags
                                     type: flag_parameters
                                     if: _parent.size_of_data != 20
@@ -1137,10 +1025,50 @@ types:
                         type: s4
                     seq:
                       - id: channels
-                        type: psd_image_data(_parent.layer_records[layer_index].bounding_box.width, _parent.layer_records[layer_index].bounding_box.height, 1)
-                        size: _parent.layer_records[layer_index].channel_information[_index].len_channel_data
+                        type: channel_image_data(_index)
                         repeat: expr
                         repeat-expr: _parent.layer_records[layer_index].num_channels
+                    types:
+                      channel_image_data:
+                        params:
+                          - id: channel_index
+                            type: s4
+                        seq:
+                          - id: data
+                            type: psd_image_data(bbox.width, bbox.height, 1)
+                            size: channel_info.len_channel_data
+                        instances:
+                          channel_info:
+                            value: _parent._parent.layer_records[_parent.layer_index].channel_information[channel_index]
+                          is_user_supplied_mask:
+                            value: 'channel_info.id == channel_ids::user_supplied_layer_mask'
+                          bbox:
+                            value: >
+                              is_user_supplied_mask
+                                ? _parent._parent.layer_records[_parent.layer_index].extra_data.layer_mask_data.data.bounding_box
+                                : _parent._parent.layer_records[_parent.layer_index].bounding_box
+          bounding_box_type:
+            seq:
+              - id: top
+                type: s4
+              - id: left
+                type: s4
+              - id: bottom
+                type: s4
+              - id: right
+                type: s4
+            instances:
+              width:
+                value: right - left
+              height:
+                value: bottom - top
+          channel_information_record:
+            seq:
+              - id: id
+                type: s2
+                enum: channel_ids
+              - id: len_channel_data
+                type: s4
           global_layer_mask_information:
             seq:
               - id: size_of_data
@@ -1170,10 +1098,13 @@ types:
           additional_layer_information:
             seq:
               - id: signature
-                size: 4
                 type: str
                 encoding: ASCII
-                doc: should be either 8BIM or 8B64
+                size: 4
+                valid:
+                  any-of:
+                    - '"8BIM"'
+                    - '"8B64"'
               - id: data_type
                 type: u4
                 enum: adjustment_layer_types
@@ -1184,6 +1115,7 @@ types:
                 type:
                   switch-on: data_type
                   cases:
+                    adjustment_layer_types::internal_opacity: internal_opacity_data
                     adjustment_layer_types::solid_color_sheet_setting: descriptor_resource_with_version
                     adjustment_layer_types::gradient_fill_setting: descriptor_resource_with_version
                     adjustment_layer_types::pattern_fill_setting: descriptor_resource_with_version
@@ -1208,7 +1140,7 @@ types:
                     adjustment_layer_types::type_tool_info: type_tool_info_data
                     adjustment_layer_types::unicode_layer_name: unicode_string_resource
                     adjustment_layer_types::layer_id: layer_id_data
-  #recursion limit reached                  adjustment_layer_types::object_based_effects_layer_info: object_based_effects_layer_info_data
+                    adjustment_layer_types::object_based_effects_layer_info: object_based_effects_layer_info_data
                     #adjustment_layer_types::patterns_1: patterns_1_data
                     #adjustment_layer_types::patterns_2: patterns_2_data
                     #adjustment_layer_types::patterns_3: patterns_3_data
@@ -1221,13 +1153,13 @@ types:
                     #adjustment_layer_types::reference_point: reference_point_data
                     adjustment_layer_types::section_divider_setting: section_divider_setting_data
                     #adjustment_layer_types::channel_blending_restrictions_setting: channel_blending_restrictions_setting_data
-                    #adjustment_layer_types::vector_mask_setting_1: vector_mask_setting_1_data
-                    #adjustment_layer_types::vector_mask_setting_2: vector_mask_setting_2_data
+                    adjustment_layer_types::vector_mask_setting_1: vector_mask_setting_data
+                    adjustment_layer_types::vector_mask_setting_2: vector_mask_setting_data
                     #adjustment_layer_types::type_tool_object_setting: type_tool_object_setting_data
                     #adjustment_layer_types::foreign_effects_id: foreign_effects_id_data
                     adjustment_layer_types::layer_name_source_setting: layer_name_source_setting_data
                     #adjustment_layer_types::pattern_data: pattern_data_data
-                    #adjustment_layer_types::metadata_setting: metadata_setting_data
+                    adjustment_layer_types::metadata_setting: metadata_setting_data
                     #adjustment_layer_types::layer_version: layer_version_data
                     #adjustment_layer_types::transparency_shapes_layer: transparency_shapes_layer_data
                     #adjustment_layer_types::layer_mask_as_global_mask: layer_mask_as_global_mask_data
@@ -1244,9 +1176,9 @@ types:
                     #adjustment_layer_types::filter_mask: filter_mask_data
                     #adjustment_layer_types::placed_layer_data: placed_layer_data_data
                     adjustment_layer_types::vector_stroke_data: descriptor_resource_with_version
-                    #adjustment_layer_types::vector_stroke_content_data: vector_stroke_content_data_data
+                    adjustment_layer_types::vector_stroke_content_data: vector_stroke_content_data_data
                     #adjustment_layer_types::using_aligned_rendering: using_aligned_rendering_data
-                    #adjustment_layer_types::vector_origination_data: vector_origination_data_data
+                    adjustment_layer_types::vector_origination_data: vector_origination_data_data
                     adjustment_layer_types::pixel_source_data_1: descriptor_resource_with_version
                     #adjustment_layer_types::pixel_source_data_2: pixel_source_data_2_data
                     adjustment_layer_types::artboard_data_1: descriptor_resource_with_version
@@ -1261,6 +1193,15 @@ types:
                     #adjustment_layer_types::filter_effects_2: filter_effects_2_data
                 size: size_of_data
             types:
+              internal_opacity_data:
+                seq:
+                  - id: value_raw
+                    type: u1
+                  - id: padding
+                    size: 3
+                instances:
+                  value:
+                    value: value_raw / 255.0 * 100
               brightness_and_contrast_data:
                 seq:
                   - id: brightness
@@ -1346,7 +1287,10 @@ types:
                   effect:
                     seq:
                       - id: signature
-                        contents: [0x38, 0x42, 0x49, 0x4D] #8BIM
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                        valid: '"8BIM"'
                       - id: type
                         type: u4
                         enum: effect_types
@@ -1677,23 +1621,91 @@ types:
                     1: open_folder
                     2: closed_folder
                     3: bounding_section_divider
+              vector_mask_setting_data:
+                seq:
+                  - id: version
+                    type: s4
+                  - id: flags
+                    type: vector_mask_setting_flags
+                  - id: paths
+                    type: path_resource
+                types:
+                  vector_mask_setting_flags:
+                    seq:
+                      # TODO: Adobe's specification calls this "bit 1", but I'm assuming they meant
+                      # bit 0?
+                      - id: invert
+                        type: b1
+                      - id: not_link
+                        type: b1
+                      - id: disable
+                        type: b1
+                      - id: unused_flags
+                        type: b29
               layer_name_source_setting_data:
                 seq:
                   - id: id
                     type: str
                     encoding: ASCII
                     size: 4
+              metadata_setting_data:
+                seq:
+                  - id: num_metadata_items
+                    type: s4
+                  - id: metadata_items
+                    type: metadata_item
+                    repeat: expr
+                    repeat-expr: num_metadata_items
+                types:
+                  metadata_item:
+                    seq:
+                      - id: signature
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                        valid: '"8BIM"'
+                      - id: key
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                      - id: copy_on_sheet_duplication_raw
+                        type: u1
+                      - id: padding
+                        size: 3
+                      - id: len_undocumented_data
+                        type: s4
+                      - id: undocumented_data
+                        size: len_undocumented_data
+                    instances:
+                      copy_on_sheet_duplication:
+                        value: copy_on_sheet_duplication_raw != 0
+              vector_stroke_content_data_data:
+                seq:
+                  - id: key
+                    type: str
+                    encoding: ASCII
+                    size: 4
+                  - id: descriptor
+                    type: descriptor_resource_with_version
+              vector_origination_data_data:
+                seq:
+                  - id: version
+                    type: s4
+                    doc: = 1 for Photoshop CC
+                  - id: descriptor
+                    type: descriptor_resource_with_version
               object_based_effects_layer_info_data:
                 seq:
                   - id: version
                     type: s4
-                    doc: value should be 0
+                    valid: 0
                   - id: descriptor_version
                     type: s4
                   - id: descriptor
                     type: descriptor_resource
             enums:
               adjustment_layer_types:
+                0x694F7061: internal_opacity #iOpa
                 0x536F436F: solid_color_sheet_setting #SoCo
                 0x4764466C: gradient_fill_setting #GdFl
                 0x5074466C: pattern_fill_setting #PtFl
@@ -1768,6 +1780,14 @@ types:
                 0x4C4D736B: user_mask #LMsk
                 0x46586964: filter_effects_1 #FXid
                 0x46456964: filter_effects_2 #FEid
+        enums:
+          channel_ids:
+            0: red
+            1: green
+            2: blue
+            -1: transparency_mask
+            -2: user_supplied_layer_mask
+            -3: real_user_supplied_layer_mask
   psd_image_data:
     params:
       - id: width
@@ -1809,7 +1829,7 @@ types:
         type: string_or_key
       - id: number_of_items_in_descriptor
         type: s4
-      - id: item
+      - id: items
         type: descriptor_item
         repeat: expr
         repeat-expr: number_of_items_in_descriptor
@@ -1978,8 +1998,11 @@ types:
                 type: s8
           boolean_item_data:
             seq:
-              - id: value
-                type: b8
+              - id: value_raw
+                type: u1
+            instances:
+              value:
+                value: value_raw != 0
           class_item_data:
             seq:
               - id: name_from_class_id
@@ -2023,6 +2046,118 @@ types:
             type: str
             encoding: ASCII
             if: length == 0
+  path_resource:
+    seq:
+      - id: path_records
+        type: path_record
+        size: 26
+        # Path resources are sometimes padded to the next four-byte boundary, so `repeat: eos` is
+        # insufficient here.
+        repeat: until
+        repeat-until: _io.size - _io.pos < 26
+    types:
+      path_record:
+        seq:
+          - id: path_type
+            type: s2
+            enum: type_of_paths
+          - id: path_data
+            type:
+              switch-on: path_type
+              cases:
+                type_of_paths::closed_subpath_length_record: subpath_length_record_data
+                type_of_paths::closed_subpath_bezier_knot_linked: bezier_knot_record_data
+                type_of_paths::closed_subpath_bezier_knot_unlinked: bezier_knot_record_data
+                type_of_paths::open_subpath_length_record: subpath_length_record_data
+                type_of_paths::open_subpath_bezier_knot_linked: bezier_knot_record_data
+                type_of_paths::open_subpath_bezier_knot_unlinked: bezier_knot_record_data
+                type_of_paths::clipboard_record: clipboard_record_data
+                type_of_paths::initial_fill_rule_record: initial_fill_rule_record_data
+        types:
+          subpath_length_record_data:
+            doc-ref: https://android.googlesource.com/platform/tools/base/+/studio-2.2/pixelprobe/src/main/java/com/android/tools/pixelprobe/decoder/psd/PsdFile.java#691
+            seq:
+              - id: number_of_bezier_knot_records
+                type: s2
+              - id: operation_raw
+                type: s2
+              - id: tag
+                type: s2
+                doc: If the tag is zero, then subpath is not a path operation and is instead added to the current path
+              - id: padding
+                size: 18
+            instances:
+              operation:
+                value: 'tag == 0 ? 4 : operation_raw'
+                enum: path_operation
+            enums:
+              path_operation:
+                0: xor
+                1: merge
+                2: subtract
+                3: intersect
+
+                4:
+                  id: add
+                  doc: This value is represented by a tag value of 0
+          bezier_knot_record_data:
+            seq:
+              - id: preceding_path_control_point
+                type: path_point
+              - id: anchor_point
+                type: path_point
+              - id: leaving_path_control_point
+                type: path_point
+            types:
+              path_point:
+                seq:
+                  - id: vertical_component
+                    type: component
+                  - id: horizontal_component
+                    type: component
+              component:
+                seq:
+                  - id: raw_value
+                    type: s4
+                instances:
+                  value:
+                    # Possible Kaitai Struct compiler bug: this 1.0 is required to actually cooerce
+                    # to a floating point value.
+                    value: raw_value.as<f8> * 1.0 / 0x1000000
+          clipboard_record_data:
+            seq:
+              - id: top
+                size: 4
+              - id: left
+                size: 4
+              - id: bottom
+                size: 4
+              - id: right
+                size: 4
+              - id: resolution
+                size: 4
+              - id: padding
+                size-eos: true
+          initial_fill_rule_record_data:
+            seq:
+              - id: record
+                type: s2
+                enum: record_values
+            enums:
+              record_values:
+                0: fill_does_not_start_with_all_pixels
+                1: fill_starts_with_all_pixels
+        enums:
+          type_of_paths:
+            0: closed_subpath_length_record
+            1: closed_subpath_bezier_knot_linked
+            2: closed_subpath_bezier_knot_unlinked
+            3: open_subpath_length_record
+            4: open_subpath_bezier_knot_linked
+            5: open_subpath_bezier_knot_unlinked
+            6: path_fill_rule_record
+            7: clipboard_record
+            8: initial_fill_rule_record
   unicode_string_resource:
     seq:
       - id: number_of_characters
@@ -2035,6 +2170,8 @@ types:
       - id: length
         type: u1
       - id: string
+        type: str
+        encoding: ASCII
         size: length
       - id: padding
         size: 1
@@ -2044,6 +2181,8 @@ types:
       - id: length
         type: u1
       - id: string
+        type: str
+        encoding: ASCII
         size: length
       - id: padding
         size: 4 - ((length + 1) % 4)
@@ -2060,7 +2199,10 @@ types:
   blend_mode_structure:
     seq:
       - id: signature
-        contents: [0x38, 0x42, 0x49, 0x4D]
+        type: str
+        encoding: ASCII
+        size: 4
+        valid: '"8BIM"'
       - id: key
         type: u4
         enum: blend_modes
