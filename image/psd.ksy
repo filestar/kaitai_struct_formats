@@ -1167,7 +1167,7 @@ types:
                     #adjustment_layer_types::channel_mixer: channel_mixer_data
                     #adjustment_layer_types::placed_layer: placed_layer_data
                     #adjustment_layer_types::linked_layer_1: linked_layer_1_data
-                    #adjustment_layer_types::linked_layer_2: linked_layer_2_data
+                    adjustment_layer_types::linked_layer_2: linked_layer_2_data
                     #adjustment_layer_types::linked_layer_3: linked_layer_3_data
                     adjustment_layer_types::content_generator_extra_data: descriptor_resource_with_version
                     #adjustment_layer_types::text_engine_data: text_engine_data_data
@@ -1679,6 +1679,79 @@ types:
                     instances:
                       copy_on_sheet_duplication:
                         value: copy_on_sheet_duplication_raw != 0
+              linked_layer_2_data:
+                seq:
+                  - id: files
+                    type: linked_file
+                    repeat: until
+                    repeat-until: _io.size - _io.pos < 8
+                types:
+                  linked_file:
+                    seq:
+                      - id: len_data
+                        type: s8
+                      - id: data
+                        type: linked_file_data
+                        size: len_data
+                  linked_file_data:
+                    seq:
+                      - id: type
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                        doc: '"liFD" linked file data, "liFE" linked file external or "liFA" linked file alias'
+                      - id: version
+                        type: s4
+                        doc: = 1 to 7
+                      - id: unique_id
+                        type: pascal_string
+                      - id: original_file_name
+                        type: unicode_string_resource
+                      - id: file_type
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                      - id: file_creator
+                        type: str
+                        encoding: ASCII
+                        size: 4
+                      - id: len_raw_data
+                        type: s8
+                      - id: has_file_open_descriptor
+                        type: u1
+                      # FIXME: some non-"liFD"-type fields remain unspecified below:
+                      - id: open_parameters
+                        type: descriptor_resource_with_version
+                        if: has_file_open_descriptor != 0
+                      - id: linked_file_descriptor
+                        type: descriptor_resource_with_version
+                        if: type == "liFE"
+                      - id: raw_data
+                        size: len_raw_data
+                        if: type == "liFD"
+                      - id: child_document_id
+                        type: unicode_string_resource
+                        if: version >= 5
+                      - id: asset_mod_time
+                        type: f8
+                        if: version >= 6
+                      - id: asset_locked_state
+                        type: u1
+                        if: version >= 7
+                  linked_file_timestamp:
+                    seq:
+                      - id: year
+                        type: s4
+                      - id: month
+                        type: s1
+                      - id: day
+                        type: s1
+                      - id: hour
+                        type: s1
+                      - id: minute
+                        type: s1
+                      - id: seconds
+                        type: f8
               vector_stroke_content_data_data:
                 seq:
                   - id: key
@@ -1706,6 +1779,7 @@ types:
             enums:
               adjustment_layer_types:
                 0x694F7061: internal_opacity #iOpa
+                0x6C6E6B45: is_link_layer #lnkE
                 0x536F436F: solid_color_sheet_setting #SoCo
                 0x4764466C: gradient_fill_setting #GdFl
                 0x5074466C: pattern_fill_setting #PtFl
@@ -2165,6 +2239,14 @@ types:
       - id: string
         type: str
         size: number_of_characters * 2
+  unicode_string_resource_le:
+    seq:
+      - id: number_of_characters
+        type: s4
+      - id: string
+        type: str
+        encoding: UTF-16LE
+        size: number_of_characters * 2
   pascal_string_padded_to_2_byte_multiple:
     seq:
       - id: length
@@ -2176,6 +2258,14 @@ types:
       - id: padding
         size: 1
         if: length % 2 == 0 and _io.pos < _io.size
+  pascal_string:
+    seq:
+      - id: length
+        type: u1
+      - id: string
+        type: str
+        encoding: ASCII
+        size: length
   pascal_string_padded_to_4_byte_multiple:
     seq:
       - id: length
