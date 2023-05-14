@@ -930,7 +930,7 @@ types:
                             type: layer_blending_ranges
                           - id: layer_name
                             type: pascal_string_padded_to_4_byte_multiple
-                          - id: additional_layer_information
+                          - id: additional_layer_info
                             type: additional_layer_information
                             repeat: eos
                         types:
@@ -1117,6 +1117,7 @@ types:
                   cases:
                     adjustment_layer_types::internal_opacity: internal_opacity_data
                     adjustment_layer_types::solid_color_sheet_setting: descriptor_resource_with_version
+                    adjustment_layer_types::compositor_used: descriptor_resource_with_version
                     adjustment_layer_types::gradient_fill_setting: descriptor_resource_with_version
                     adjustment_layer_types::pattern_fill_setting: descriptor_resource_with_version
                     adjustment_layer_types::brightness_and_contrast: brightness_and_contrast_data
@@ -1165,7 +1166,8 @@ types:
                     #adjustment_layer_types::layer_mask_as_global_mask: layer_mask_as_global_mask_data
                     #adjustment_layer_types::vector_mask_as_global_mask: vector_mask_as_global_mask_data
                     #adjustment_layer_types::channel_mixer: channel_mixer_data
-                    #adjustment_layer_types::placed_layer: placed_layer_data
+                    adjustment_layer_types::placed_layer: placed_layer_data
+                    adjustment_layer_types::placed_layer_data: placed_layer_data_data
                     #adjustment_layer_types::linked_layer_1: linked_layer_1_data
                     adjustment_layer_types::linked_layer_2: linked_layer_2_data
                     #adjustment_layer_types::linked_layer_3: linked_layer_3_data
@@ -1174,7 +1176,6 @@ types:
                     adjustment_layer_types::unicode_path_names: descriptor_resource_with_version
                     adjustment_layer_types::animation_effects: descriptor_resource_with_version
                     #adjustment_layer_types::filter_mask: filter_mask_data
-                    #adjustment_layer_types::placed_layer_data: placed_layer_data_data
                     adjustment_layer_types::vector_stroke_data: descriptor_resource_with_version
                     adjustment_layer_types::vector_stroke_content_data: vector_stroke_content_data_data
                     #adjustment_layer_types::using_aligned_rendering: using_aligned_rendering_data
@@ -1679,6 +1680,55 @@ types:
                     instances:
                       copy_on_sheet_duplication:
                         value: copy_on_sheet_duplication_raw != 0
+              placed_layer_data:
+                seq:
+                  - id: type
+                    type: str
+                    encoding: ASCII
+                    size: 4
+                    valid: '"plcL"'
+                  - id: version
+                    type: s4
+                  - id: identifier
+                    type: pascal_string
+                  - id: page_number
+                    type: s4
+                  - id: total_pages
+                    type: s4
+                  - id: anti_alias_policy
+                    type: s4
+                  - id: placed_layer_type
+                    type: s4
+                    enum: placed_layer_types
+                  - id: transformation
+                    type: f8
+                    repeat: expr
+                    repeat-expr: 8
+                  - id: warp_version
+                    type: s4
+                  - id: warp_descriptor_version
+                    type: s4
+                  - id: warp_descriptor
+                    type: descriptor_resource
+                enums:
+                  placed_layer_types:
+                    0: unknown
+                    1: vector
+                    2: raster
+                    3: image_stack
+              placed_layer_data_data:
+                seq:
+                  - id: identifier
+                    type: str
+                    encoding: ASCII
+                    size: 4
+                    valid: '"soLD"'
+                  - id: version
+                    type: s4
+                  - id: descriptor_version
+                    type: s4
+                  - id: descriptor
+                    type: descriptor_resource
               linked_layer_2_data:
                 seq:
                   - id: files
@@ -1781,6 +1831,7 @@ types:
                 0x694F7061: internal_opacity #iOpa
                 0x6C6E6B45: is_link_layer #lnkE
                 0x536F436F: solid_color_sheet_setting #SoCo
+                0x63696E66: compositor_used # cinf
                 0x4764466C: gradient_fill_setting #GdFl
                 0x5074466C: pattern_fill_setting #PtFl
                 0x62726974: brightness_and_contrast #brit
@@ -1828,7 +1879,7 @@ types:
                 0x74736C79: transparency_shapes_layer #tsly
                 0x6C6D676D: layer_mask_as_global_mask #lmgm
                 0x766D676D: vector_mask_as_global_mask #vmgm
-                0x706C4C64: placed_layer #plLd
+                0x506C4C64: placed_layer #PlLd (seemingly misdocumented as plLd by Adobe?)
                 0x6C6E6B44: linked_layer_1 #lnkD
                 0x6C6E6B32: linked_layer_2 #lnk2
                 0x6C6E6B33: linked_layer_3 #lnk3
