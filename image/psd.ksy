@@ -12,8 +12,11 @@ seq:
     type: psd_image_resources
   - id: layer_and_mask_information
     type: psd_layer_and_mask_information
+  - id: image_data_compression
+    type: u2
+    enum: compression
   - id: image_data
-    type: psd_image_data(header.dimensions.width, header.dimensions.height, header.num_channels)
+    type: psd_image_data(image_data_compression, header.dimensions.width, header.dimensions.height, header.num_channels)
 types:
   psd_header:
     seq:
@@ -133,7 +136,7 @@ types:
                     image_resource_identifier::effects_visible: effects_visible_resource
                     image_resource_identifier::spot_halftone: spot_halftone_resource
                     image_resource_identifier::document_specific_ids_seed_number: document_specific_ids_seed_number_resource
-                    image_resource_identifier::unicode_alpha_names: unicode_string_resource
+                    image_resource_identifier::unicode_alpha_names: unicode_alpha_channel_names_resource
                     image_resource_identifier::indexed_color_table_count: indexed_color_table_count_resource
                     image_resource_identifier::transparency_index: transparency_index_resource
                     image_resource_identifier::global_altitude: global_altitude_resource
@@ -257,7 +260,12 @@ types:
               alpha_channel_names_resource:
                 seq:
                   - id: names
-                    type: pascal_string_padded_to_2_byte_multiple
+                    type: pascal_string
+                    repeat: eos
+              unicode_alpha_channel_names_resource:
+                seq:
+                  - id: names
+                    type: unicode_string_resource
                     repeat: eos
               border_information_resource:
                 seq:
@@ -495,7 +503,7 @@ types:
                       slices_resource_header_v6:
                         seq:
                           - id: bounding_rectangle
-                            type: bounding_rectangle_type
+                            type: rectangle
                           - id: name_of_slices_group
                             type: unicode_string_resource
                           - id: number_of_slices
@@ -505,16 +513,6 @@ types:
                             #repeat: expr
                             #repeat-expr: number_of_slices
                         types:
-                          bounding_rectangle_type:
-                            seq:
-                              - id: top
-                                size: 4
-                              - id: left
-                                size: 4
-                              - id: bottom
-                                size: 4
-                              - id: right
-                                size: 4
                           slices_resource_block:
                             seq:
                               - id: id
@@ -531,7 +529,7 @@ types:
                               - id: type
                                 type: s4
                               - id: bounding_box
-                                type: bounding_rectangle_type
+                                type: rectangle
                               - id: url
                                 type: unicode_string_resource
                               - id: target
@@ -602,6 +600,8 @@ types:
                     size: 4
                     repeat: expr
                     repeat-expr: number_of_alpha_identifiers
+                  - id: rest
+                    size-eos: true
               url_list_resource:
                 seq:
                   - id: number_of_urls
@@ -882,7 +882,7 @@ types:
                   layer_record:
                     seq:
                       - id: bounding_box
-                        type: bounding_box_type
+                        type: rectangle
                       - id: num_channels
                         type: s2
                       - id: channel_information
@@ -946,7 +946,7 @@ types:
                               layer_mask_adjustment_layer_data:
                                 seq:
                                   - id: bounding_box
-                                    type: bounding_box_type
+                                    type: rectangle
                                   - id: default_color
                                     type: u1
                                     doc: value should be 0 or 255
@@ -963,7 +963,7 @@ types:
                                     doc: value should be 0 or 255
                                     if: _parent.size_of_data != 20
                                   - id: real_bounding_box
-                                    type: bounding_box_type
+                                    type: rectangle
                                     if: _parent.size_of_data != 20
                                 types:
                                   flag_parameters:
@@ -1034,9 +1034,12 @@ types:
                           - id: channel_index
                             type: s4
                         seq:
+                          - id: compression
+                            type: s2
+                            enum: compression
                           - id: data
-                            type: psd_image_data(bbox.width, bbox.height, 1)
-                            size: channel_info.len_channel_data
+                            type: psd_image_data(compression, bbox.width, bbox.height, 1)
+                            size: channel_info.len_channel_data - 2
                         instances:
                           channel_info:
                             value: _parent._parent.layer_records[_parent.layer_index].channel_information[channel_index]
@@ -1047,21 +1050,6 @@ types:
                               is_user_supplied_mask
                                 ? _parent._parent.layer_records[_parent.layer_index].extra_data.layer_mask_data.data.bounding_box
                                 : _parent._parent.layer_records[_parent.layer_index].bounding_box
-          bounding_box_type:
-            seq:
-              - id: top
-                type: s4
-              - id: left
-                type: s4
-              - id: bottom
-                type: s4
-              - id: right
-                type: s4
-            instances:
-              width:
-                value: right - left
-              height:
-                value: bottom - top
           channel_information_record:
             seq:
               - id: id
@@ -1142,14 +1130,14 @@ types:
                     adjustment_layer_types::unicode_layer_name: unicode_string_resource
                     adjustment_layer_types::layer_id: layer_id_data
                     adjustment_layer_types::object_based_effects_layer_info: object_based_effects_layer_info_data
-                    #adjustment_layer_types::patterns_1: patterns_1_data
+                    adjustment_layer_types::patterns_1: patterns_1_data
                     #adjustment_layer_types::patterns_2: patterns_2_data
                     #adjustment_layer_types::patterns_3: patterns_3_data
                     #adjustment_layer_types::annotations: annotations_data
                     #adjustment_layer_types::blend_clipping_elements: blend_clipping_elements_data
                     #adjustment_layer_types::blend_interior_elements: blend_interior_elements_data
                     #adjustment_layer_types::knockout_setting: knockout_setting_data
-                    #adjustment_layer_types::protected_setting: protected_setting_data
+                    adjustment_layer_types::protected_setting: protected_setting_data
                     #adjustment_layer_types::sheet_color_setting: sheet_color_setting_data
                     #adjustment_layer_types::reference_point: reference_point_data
                     adjustment_layer_types::section_divider_setting: section_divider_setting_data
@@ -1500,38 +1488,38 @@ types:
                   #- id: color_information
                   #  type: color_information
                 types:
-                  font_information:
-                    seq:
-                      - id: version
-                        type: s2
-                        doc: value should be 6
-                      - id: number_of_faces
-                        type: s2
-                      - id: faces
-                        type: face_information
-                        repeat: expr
-                        repeat-expr: number_of_faces
-                    types:
-                      face_information:
-                        seq:
-                          - id: mark_value
-                            size: 2
-                          - id: font_type_data
-                            size: 4
-                          - id: font_name
-                            type: pascal_string_padded_to_2_byte_multiple
-                          - id: font_family_name
-                            type: pascal_string_padded_to_2_byte_multiple
-                          - id: font_style_name
-                            type: pascal_string_padded_to_2_byte_multiple
-                          - id: script_value
-                            size: 2
-                          - id: number_of_design_axes_vector_to_follow
-                            type: s4
-                          - id: design_axes_vector_values
-                            size: 4
-                            repeat: expr
-                            repeat-expr: number_of_design_axes_vector_to_follow
+                  # font_information:
+                  #   seq:
+                  #     - id: version
+                  #       type: s2
+                  #       doc: value should be 6
+                  #     - id: number_of_faces
+                  #       type: s2
+                  #     - id: faces
+                  #       type: face_information
+                  #       repeat: expr
+                  #       repeat-expr: number_of_faces
+                  #   types:
+                  #     face_information:
+                  #       seq:
+                  #         - id: mark_value
+                  #           size: 2
+                  #         - id: font_type_data
+                  #           size: 4
+                  #         - id: font_name
+                  #           type: pascal_string_padded_to_2_byte_multiple
+                  #         - id: font_family_name
+                  #           type: pascal_string_padded_to_2_byte_multiple
+                  #         - id: font_style_name
+                  #           type: pascal_string_padded_to_2_byte_multiple
+                  #         - id: script_value
+                  #           size: 2
+                  #         - id: number_of_design_axes_vector_to_follow
+                  #           type: s4
+                  #         - id: design_axes_vector_values
+                  #           size: 4
+                  #           repeat: expr
+                  #           repeat-expr: number_of_design_axes_vector_to_follow
                   style_information:
                     seq:
                       - id: number_of_styles
@@ -1608,6 +1596,11 @@ types:
               layer_id_data:
                 seq:
                   - id: layer_id
+                    size: 4
+              protected_setting_data:
+                doc: 'TODO: Actually specify this.'
+                seq:
+                  - id: unspecified
                     size: 4
               section_divider_setting_data:
                 seq:
@@ -1743,12 +1736,18 @@ types:
                       - id: data
                         type: linked_file_data
                         size: len_data
+                      - id: padding
+                        size: 4 - (len_data % 4)
+                        if: (len_data % 4) != 0
                   linked_file_data:
                     seq:
                       - id: type
                         type: str
                         encoding: ASCII
                         size: 4
+                        valid:
+                          any-of:
+                            - '"liFD"'
                         doc: '"liFD" linked file data, "liFE" linked file external or "liFA" linked file alias'
                       - id: version
                         type: s4
@@ -1826,6 +1825,113 @@ types:
                     type: s4
                   - id: descriptor
                     type: descriptor_resource
+              patterns_1_data:
+                seq:
+                  - id: patterns
+                    type: pattern_record
+                    repeat: until
+                    repeat-until: _io.size - _io.pos < 4
+                types:
+                  pattern_record:
+                    seq:
+                      - id: length
+                        type: s4
+                      - id: data
+                        type: pattern_data
+                        size: length
+                    types:
+                      pattern_data:
+                        seq:
+                          - id: version
+                            type: s4
+                          - id: image_mode
+                            type: s4
+                            enum: image_modes
+                          - id: point_y
+                            type: s2
+                          - id: point_x
+                            type: s2
+                          - id: name
+                            type: unicode_string_resource
+                          - id: unique_id
+                            type: pascal_string
+                          - id: index_color_table
+                            size: 256 * 3
+                            if: image_mode == image_modes::indexed
+                          - id: data
+                            type: virtual_memory_array_list
+                      virtual_memory_array_list:
+                        seq:
+                          - id: version
+                            type: s4
+                            valid: 3
+                          - id: length
+                            type: s4
+                          - id: data
+                            type: virtual_memory_array_list_data
+                            size: length
+                      virtual_memory_array_list_data:
+                        seq:
+                          - id: rectangle
+                            type: rectangle
+                          - id: number_of_channels
+                            type: s4
+                          - id: channels
+                            type: channel
+                            repeat: expr
+                            # "repeated for the number of channels + one for a user mask + one for a sheet mask"
+                            repeat-expr: number_of_channels + 2
+                      channel:
+                        seq:
+                          - id: is_written_raw
+                            type: s4
+                          - id: len_data
+                            type: s4
+                            if: is_written
+                          - id: data
+                            type: channel_data
+                            size: len_data.as<s4>
+                            if: is_written and len_data.as<s4> != 0
+                        instances:
+                          is_written:
+                            value: is_written_raw != 0
+                      channel_data:
+                        seq:
+                          - id: pixel_depth_1
+                            type: s4
+                            valid:
+                              any-of:
+                                - 1
+                                - 8
+                                - 16
+                                - 32
+                          - id: rectangle
+                            type: rectangle
+                          - id: pixel_depth_2
+                            type: s2
+                            valid:
+                              any-of:
+                                - 1
+                                - 8
+                                - 16
+                                - 32
+                          # Adobe's documentation claims "1 is zip", which does not appear to be true.
+                          - id: compression_mode
+                            type: u1
+                            enum: compression
+                          - id: data
+                            type: psd_image_data(compression_mode, rectangle.width, rectangle.height, 1)
+                            size-eos: true
+                    enums:
+                      image_modes:
+                        0: bitmap
+                        1: grayscale
+                        2: indexed
+                        3: rgb
+                        4: cmyk
+                        7: multichannel
+                        8: duotone
+                        9: lab
             enums:
               adjustment_layer_types:
                 0x694F7061: internal_opacity #iOpa
@@ -1915,6 +2021,9 @@ types:
             -3: real_user_supplied_layer_mask
   psd_image_data:
     params:
+      - id: compression
+        type: u2
+        enum: compression
       - id: width
         type: s4
       - id: height
@@ -1926,14 +2035,6 @@ types:
           layers) is stored in a list of `psd_image_data` values, one for each channel, and each
           one with a `num_channels` of 1.
     seq:
-      - id: compression
-        type: u2
-        enum: compression
-        # only support raw and rle data for now
-        valid:
-          any-of:
-            - compression::raw
-            - compression::rle
       - id: data
         type:
           switch-on: compression
@@ -1958,7 +2059,7 @@ types:
         type: descriptor_item
         repeat: expr
         repeat-expr: number_of_items_in_descriptor
-        #repeat-expr: number_of_items_in_descriptor > 10 ? 10 : number_of_items_in_descriptor
+        # repeat-expr: 'number_of_items_in_descriptor > 1 ? 1 : number_of_items_in_descriptor'
     types:
       descriptor_item:
         seq:
@@ -1973,9 +2074,11 @@ types:
               cases:
                 os_type_keys::reference: reference_item_data
                 os_type_keys::descriptor: descriptor_item_data
+                os_type_keys::object_array: descriptor_resource_with_version
                 os_type_keys::list: list_item_data
                 os_type_keys::double: double_item_data
                 os_type_keys::unit_float: unit_float_item_data
+                os_type_keys::unit_floats: unit_floats_item_data
                 os_type_keys::string: string_item_data
                 os_type_keys::enumerated: enumerated_item_data
                 os_type_keys::integer: integer_item_data
@@ -2071,9 +2174,11 @@ types:
                       cases:
                         os_type_keys::reference: reference_item_data
                         os_type_keys::descriptor: descriptor_item_data
+                        os_type_keys::object_array: descriptor_resource_with_version
                         os_type_keys::list: list_item_data
                         os_type_keys::double: double_item_data
                         os_type_keys::unit_float: unit_float_item_data
+                        os_type_keys::unit_floats: unit_floats_item_data
                         os_type_keys::string: string_item_data
                         os_type_keys::enumerated: enumerated_item_data
                         os_type_keys::integer: integer_item_data
@@ -2095,14 +2200,18 @@ types:
                 enum: units
               - id: value
                 type: f8
-            enums:
-              units:
-                0x23416E67: angle_base_degrees ##Ang
-                0x2352736C: density_base_per_inch ##Rsl
-                0x23526C74: distance_base_72ppi ##Rlt
-                0x234E6E65: none_coerced ##NNe
-                0x23507263: percent_unit_value ##Prc
-                0x2350786C: pixels_tagged_unit_value ##Pxl
+          unit_floats_item_data:
+            doc-ref: https://github.com/psd-tools/psd-tools/blob/3ce7feede8446fe3fe7648cbe043880b6459d84e/src/psd_tools/psd/descriptor.py#L313
+            seq:
+              - id: unit
+                type: s4
+                enum: units
+              - id: number_of_items
+                type: s4
+              - id: items
+                type: f8
+                repeat: expr
+                repeat-expr: number_of_items
           string_item_data:
             seq:
               - id: string
@@ -2144,9 +2253,15 @@ types:
           os_type_keys:
             0x6F626A20: reference #obj
             0x4F626A63: descriptor #Objc
+            0x4F624172:
+              id: object_array #ObAr (undocumented)
+              doc-ref: https://github.com/psd-tools/psd-tools/blob/3ce7feede8446fe3fe7648cbe043880b6459d84e/src/psd_tools/constants.py#L429
             0x566C4C73: list #VILs
             0x646F7562: double #doub
             0x556E7446: unit_float #UntF
+            0x556E466C:
+              id: unit_floats #UnFl (undocumented)
+              doc-ref: https://github.com/psd-tools/psd-tools/blob/3ce7feede8446fe3fe7648cbe043880b6459d84e/src/psd_tools/constants.py#L418
             0x54455854: string #TEXT
             0x656E756D: enumerated #enum
             0x6C6F6E67: integer #long
@@ -2157,6 +2272,13 @@ types:
             0x476C6243: global_class #GlbC
             0x616C6973: alias #alis
             0x74647461: raw_data #tdta
+          units:
+            0x23416E67: angle_base_degrees ##Ang
+            0x2352736C: density_base_per_inch ##Rsl
+            0x23526C74: distance_base_72ppi ##Rlt
+            0x234E6E65: none_coerced ##NNe
+            0x23507263: percent_unit_value ##Prc
+            0x2350786C: pixels_tagged_unit_value ##Pxl
       string_or_key:
         seq:
           - id: length
@@ -2251,14 +2373,8 @@ types:
                     value: raw_value.as<f8> * 1.0 / 0x1000000
           clipboard_record_data:
             seq:
-              - id: top
-                size: 4
-              - id: left
-                size: 4
-              - id: bottom
-                size: 4
-              - id: right
-                size: 4
+              - id: rectangle
+                type: rectangle
               - id: resolution
                 size: 4
               - id: padding
@@ -2373,6 +2489,21 @@ types:
         size: byte_counts[_index]
         repeat: expr
         repeat-expr: height * num_channels
+  rectangle:
+    seq:
+      - id: top
+        type: s4
+      - id: left
+        type: s4
+      - id: bottom
+        type: s4
+      - id: right
+        type: s4
+    instances:
+      width:
+        value: right - left
+      height:
+        value: bottom - top
 enums:
   color_mode:
     0: bitmap
