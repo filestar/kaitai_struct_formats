@@ -1130,7 +1130,7 @@ types:
                     adjustment_layer_types::unicode_layer_name: unicode_string_resource
                     adjustment_layer_types::layer_id: layer_id_data
                     adjustment_layer_types::object_based_effects_layer_info: object_based_effects_layer_info_data
-                    adjustment_layer_types::patterns_1: patterns_1_data
+                    #adjustment_layer_types::patterns_1: patterns_1_data
                     #adjustment_layer_types::patterns_2: patterns_2_data
                     #adjustment_layer_types::patterns_3: patterns_3_data
                     #adjustment_layer_types::annotations: annotations_data
@@ -1144,7 +1144,7 @@ types:
                     #adjustment_layer_types::channel_blending_restrictions_setting: channel_blending_restrictions_setting_data
                     adjustment_layer_types::vector_mask_setting_1: vector_mask_setting_data
                     adjustment_layer_types::vector_mask_setting_2: vector_mask_setting_data
-                    #adjustment_layer_types::type_tool_object_setting: type_tool_object_setting_data
+                    adjustment_layer_types::type_tool_object_setting: type_tool_object_setting_data
                     #adjustment_layer_types::foreign_effects_id: foreign_effects_id_data
                     adjustment_layer_types::layer_name_source_setting: layer_name_source_setting_data
                     #adjustment_layer_types::pattern_data: pattern_data_data
@@ -1181,6 +1181,8 @@ types:
                     #adjustment_layer_types::filter_effects_1: filter_effects_1_data
                     #adjustment_layer_types::filter_effects_2: filter_effects_2_data
                 size: size_of_data
+              - id: padding
+                size: 'size_of_data % 4 != 0 ? 4 - size_of_data % 4 : 0'
             types:
               internal_opacity_data:
                 seq:
@@ -1636,6 +1638,26 @@ types:
                         type: b1
                       - id: unused_flags
                         type: b29
+              type_tool_object_setting_data:
+                seq:
+                  - id: version
+                    type: s2
+                  - id: transform
+                    type: f8
+                    repeat: expr
+                    repeat-expr: 6
+                  - id: text_version
+                    type: s2
+                  - id: text_data
+                    type: descriptor_resource_with_version
+                  - id: warp_version
+                    type: s2
+                  - id: warp_data
+                    type: descriptor_resource_with_version
+                  - id: bbox
+                    type: s4
+                    repeat: expr
+                    repeat-expr: 4
               layer_name_source_setting_data:
                 seq:
                   - id: id
@@ -2059,7 +2081,6 @@ types:
         type: descriptor_item
         repeat: expr
         repeat-expr: number_of_items_in_descriptor
-        # repeat-expr: 'number_of_items_in_descriptor > 1 ? 1 : number_of_items_in_descriptor'
     types:
       descriptor_item:
         seq:
@@ -2088,7 +2109,7 @@ types:
                 os_type_keys::class: class_item_data
                 os_type_keys::global_class: class_item_data
                 os_type_keys::alias: alias_item_data
-                #os_type_keys::raw_data: raw_data_item_data
+                os_type_keys::raw_data: raw_data_item_data
         types:
           reference_item_data:
             seq:
@@ -2188,7 +2209,7 @@ types:
                         os_type_keys::class: class_item_data
                         os_type_keys::global_class: class_item_data
                         os_type_keys::alias: alias_item_data
-                        #os_type_keys::raw_data: raw_data_item_data
+                        os_type_keys::raw_data: raw_data_item_data
           double_item_data:
             seq:
               - id: value
@@ -2249,6 +2270,12 @@ types:
                 type: s4
               - id: data
                 size: size_of_data
+          raw_data_item_data:
+            seq:
+              - id: size_of_data
+                type: s4
+              - id: data
+                size: size_of_data
         enums:
           os_type_keys:
             0x6F626A20: reference #obj
@@ -2279,6 +2306,12 @@ types:
             0x234E6E65: none_coerced ##NNe
             0x23507263: percent_unit_value ##Prc
             0x2350786C: pixels_tagged_unit_value ##Pxl
+
+            # The next four are from https://android.googlesource.com/platform/tools/base/+/studio-2.2/pixelprobe/src/main/java/com/android/tools/pixelprobe/decoder/psd/PsdFile.java#864
+            0x23506E74: points ##Pnt
+            0x234D6C6D: millimeters ##Mlm
+            0x5272436D: centimeters #RrCm
+            0x5272496E: inches #RrIn
       string_or_key:
         seq:
           - id: length
